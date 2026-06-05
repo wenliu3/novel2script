@@ -10,7 +10,7 @@ from pathlib import Path
 from app.agents.base_agent import BaseAgent
 from app.schema.chapter import Chapter
 from app.services.llm_service import LLMService
-from app.utils.file_utils import read_text_file
+from app.parsers.encoding_detector import read_with_auto_encoding
 
 
 class ChapterAgent(BaseAgent):
@@ -47,12 +47,13 @@ class ChapterAgent(BaseAgent):
         chapters = []
         for num, filepath in sorted(chapter_files.items()):
             try:
-                raw_text = read_text_file(filepath)
+                encoding, raw_text = read_with_auto_encoding(filepath)
                 chapter = Chapter(
                     number=num,
                     title=self._extract_title(raw_text),
                     raw_text=raw_text,
                     file_path=str(filepath),
+                    encoding=encoding,
                 )
                 chapters.append(chapter)
                 self.logger.debug(f"  第{num}章: {chapter.word_count} 字")

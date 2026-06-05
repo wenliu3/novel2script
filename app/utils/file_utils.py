@@ -9,8 +9,41 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def read_text_file(path: Path, encoding: str = "utf-8") -> str:
+def read_text_file(
+    path: Path,
+    encoding: str | None = None,
+) -> tuple[str, str]:
     """读取文本文件内容。
+
+    如果未指定编码，自动检测文件编码（适用于中文小说的各种编码格式）。
+
+    Args:
+        path: 文件路径。
+        encoding: 文件编码。None 时自动检测。
+
+    Returns:
+        (编码名称, 文件内容) 元组。
+
+    Raises:
+        FileNotFoundError: 文件不存在时抛出。
+        ValueError: 文件为空时抛出。
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"文件不存在: {path}")
+
+    if encoding:
+        content = path.read_text(encoding=encoding).strip()
+        if not content:
+            raise ValueError(f"文件为空: {path}")
+        return encoding, content
+
+    # 自动检测编码
+    from app.parsers.encoding_detector import read_with_auto_encoding
+    return read_with_auto_encoding(path)
+
+
+def read_text_file_simple(path: Path, encoding: str = "utf-8") -> str:
+    """简单读取文本文件（兼容旧接口）。
 
     Args:
         path: 文件路径。
