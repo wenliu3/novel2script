@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.local
+
+# Generated outputs
+output/
+
+# Novel input files (user data)
+# novels/
+
+# Claude Code
+CLAUDE.md
+
+# OS files
+.DS_Store
+Thumbs.db
