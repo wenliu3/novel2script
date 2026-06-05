@@ -82,6 +82,10 @@ class Orchestrator:
         characters = self.character_agent.run(chapters_text=full_text)
         logger.info(f"提取到 {len(characters.characters)} 个角色")
 
+        # 导出角色卡片
+        output_dir = self.settings.output_base / novel_dir.name
+        self.character_agent.export_character_cards(characters, output_dir)
+
         # ── Step 3: 逐章处理（场景拆分 + 对话翻译） ──
         chapter_scripts = []
         for ch in all_chapters:
