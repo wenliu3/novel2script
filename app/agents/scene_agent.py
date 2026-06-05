@@ -25,6 +25,8 @@ class SceneAgent(BaseAgent):
         chapter_text: str,
         chapter_number: int,
         character_names: list[str] | None = None,
+        chapter_summary: str = "",
+        location_hints: list[str] | None = None,
     ) -> list[Scene]:
         """将章节拆分为场景。
 
@@ -32,13 +34,22 @@ class SceneAgent(BaseAgent):
             chapter_text: 章节原文。
             chapter_number: 章节编号（用于生成场景 ID）。
             character_names: 已知角色名列表（可选，用于上下文）。
+            chapter_summary: 章节摘要（来自 ChapterAgent 分析结果，可选）。
+            location_hints: 地点线索（来自 ChapterAgent 分析结果，可选）。
 
         Returns:
             拆分后的场景列表。
         """
-        names_context = ""
+        # 构建上下文
+        context_parts: list[str] = []
+        if chapter_summary:
+            context_parts.append(f"章节摘要: {chapter_summary}")
         if character_names:
-            names_context = f"\n已知角色: {', '.join(character_names)}"
+            context_parts.append(f"已知角色: {', '.join(character_names)}")
+        if location_hints:
+            context_parts.append(f"可能的地点: {', '.join(location_hints)}")
+
+        context_text = "\n".join(context_parts) if context_parts else ""
 
         truncated = chapter_text[:12000] if len(chapter_text) > 12000 else chapter_text
 
@@ -46,7 +57,7 @@ class SceneAgent(BaseAgent):
             "scene_splitting",
             truncated,
             chapter_number=str(chapter_number),
-            character_names=names_context,
+            character_names=context_text,
         )
 
         scenes = []

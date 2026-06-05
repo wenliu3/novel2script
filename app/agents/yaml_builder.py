@@ -6,7 +6,6 @@
 from datetime import datetime, timezone
 
 from app.agents.base_agent import BaseAgent
-from app.schema.character import CharacterList
 from app.schema.scene import Scene
 from app.schema.script import ChapterScript, Script, ScriptMetadata
 from app.services.llm_service import LLMService
