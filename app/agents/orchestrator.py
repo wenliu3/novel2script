@@ -15,7 +15,6 @@ from app.agents.scene_agent import SceneAgent
 from app.agents.validator_agent import ValidationResult, ValidatorAgent
 from app.agents.yaml_builder import YAMLBuilderAgent
 from app.exporters.yaml_exporter import export_yaml
-from app.schema.character import CharacterList
 from app.schema.script import Script
 from app.services.config import Settings
 from app.services.llm_service import LLMService
@@ -28,7 +27,8 @@ class Orchestrator:
 
     按顺序调用各 Agent，管理数据流转：
 
-    chapter_agent → character_agent → [scene_agent → dialogue_agent] × N章
+    chapter_agent(parse) → chapter_agent(analyze) → character_agent
+    → [scene_agent → dialogue_agent] × N章
     → yaml_builder → validator → yaml_exporter
 
     Attributes:
@@ -63,7 +63,7 @@ class Orchestrator:
         logger.info(f"开始处理: {novel_dir.name}")
         logger.info(f"{'='*50}")
 
-        # ── Step 1: 解析章节 ──
+        # ── Step 1: 解析章节（文件级） ──
         all_chapters = self.chapter_agent.run(novel_dir=novel_dir)
 
         # 过滤指定章节
@@ -75,27 +75,53 @@ class Orchestrator:
             logger.warning("没有要处理的章节")
             return Script()
 
-        # ── Step 2: 提取角色（合并所有章节文本） ──
-        full_text = "\n\n".join(
-            f"=== 第{ch.number}章 ===\n{ch.raw_text}" for ch in all_chapters
+        # ── Step 2: 章节分析（LLM 深度分析） ──
+        chapter_report = self.chapter_agent.analyze_chapters(all_chapters)
+        logger.info(
+            f"章节分析完成: {chapter_report.total_events} 个关键事件, "
+            f"{len(chapter_report.all_characters)} 个角色, "
+            f"{len(chapter_report.all_locations)} 个地点"
         )
-        characters = self.character_agent.run(chapters_text=full_text)
-        logger.info(f"提取到 {len(characters.characters)} 个角色")
+        # 输出各章摘要（plan.md 要求的格式）
+        for s in chapter_report.summaries:
+            logger.info(f"  第{s['chapter']}章摘要: {s['summary'][:80]}...")
 
+<<<<<<< HEAD
         # 导出角色卡片
         output_dir = self.settings.output_base / novel_dir.name
         self.character_agent.export_character_cards(characters, output_dir)
 
         # ── Step 3: 逐章处理（场景拆分 + 对话翻译） ──
+=======
+        # ── Step 3: 角色分析（逐章增量提取 + 关系图谱构建） ──
+        character_result = self.character_agent.run(
+            chapters_text="",
+            chapters=all_chapters,
+        )
+        char_list = character_result.character_list
+        summary = self.character_agent.get_character_summary(character_result)
+        logger.info(
+            f"角色分析完成: {summary['total_characters']} 个角色, "
+            f"{summary['total_relationships']} 条关系, "
+            f"{summary['protagonists']} 个主角"
+        )
+
+        # ── Step 4: 逐章处理（场景拆分 + 对话翻译） ──
+        # 构建章节分析索引（按章节编号快速查找）
+        analysis_index = {a.chapter_number: a for a in chapter_report.analyses}
+>>>>>>> main
         chapter_scripts = []
         for ch in all_chapters:
             logger.info(f"── 处理第{ch.number}章 ──")
+            ch_analysis = analysis_index.get(ch.number)
 
-            # 拆分场景
+            # 拆分场景（传入章节摘要和地点线索辅助场景规划）
             scenes = self.scene_agent.run(
                 chapter_text=ch.raw_text,
                 chapter_number=ch.number,
-                character_names=[c.name for c in characters.characters],
+                character_names=[c.name for c in char_list.characters],
+                chapter_summary=ch_analysis.summary if ch_analysis else "",
+                location_hints=ch_analysis.location_hints if ch_analysis else [],
             )
 
             # 为每个场景生成镜头和对话
@@ -104,19 +130,19 @@ class Orchestrator:
                     scene=scene,
                     chapter_text=ch.raw_text,
                     chapter_number=ch.number,
-                    character_names=[c.name for c in characters.characters],
+                    character_names=[c.name for c in char_list.characters],
                 )
                 scenes[i] = scene
 
             chapter_scripts.append((ch.number, ch.title, scenes))
 
-        # ── Step 4: 组装 YAML 结构 ──
+        # ── Step 5: 组装 YAML 结构 ──
         script = self.yaml_builder.run(
             novel_name=novel_dir.name,
             chapter_scripts=chapter_scripts,
         )
 
-        # ── Step 5: 校验 ──
+        # ── Step 6: 校验 ──
         validation = self.validator.run(script=script)
         if not validation.is_valid:
             logger.error(f"校验失败: {validation.summary()}")
@@ -126,7 +152,7 @@ class Orchestrator:
             for warn in validation.warnings:
                 logger.warning(f"  ⚠ {warn}")
 
-        # ── Step 6: 导出 YAML ──
+        # ── Step 7: 导出 YAML ──
         output_path = self.settings.output_base / novel_dir.name
         export_yaml(script, output_path, f"{novel_dir.name}_script.yaml")
 
