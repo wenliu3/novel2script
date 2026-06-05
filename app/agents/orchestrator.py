@@ -86,6 +86,13 @@ class Orchestrator:
         for s in chapter_report.summaries:
             logger.info(f"  第{s['chapter']}章摘要: {s['summary'][:80]}...")
 
+<<<<<<< HEAD
+        # 导出角色卡片
+        output_dir = self.settings.output_base / novel_dir.name
+        self.character_agent.export_character_cards(characters, output_dir)
+
+        # ── Step 3: 逐章处理（场景拆分 + 对话翻译） ──
+=======
         # ── Step 3: 角色分析（逐章增量提取 + 关系图谱构建） ──
         character_result = self.character_agent.run(
             chapters_text="",
@@ -102,6 +109,7 @@ class Orchestrator:
         # ── Step 4: 逐章处理（场景拆分 + 对话翻译） ──
         # 构建章节分析索引（按章节编号快速查找）
         analysis_index = {a.chapter_number: a for a in chapter_report.analyses}
+>>>>>>> main
         chapter_scripts = []
         for ch in all_chapters:
             logger.info(f"── 处理第{ch.number}章 ──")
