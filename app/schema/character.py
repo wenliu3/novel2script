@@ -22,12 +22,8 @@ class CharacterRelation(BaseModel):
     """角色关系。"""
 
     target: str = Field(..., description="关系目标角色名")
-<<<<<<< HEAD
-    relation: str = Field(..., description="关系类型，如：师徒、兄弟、敌人")
-    description: str = Field("", description="关系描述（英文）")
-=======
     relation: str = Field(..., description="关系类型，如：师徒、兄弟、敌人、恋人")
-    description: str = Field("", description="关系描述")
+    description: str = Field("", description="关系描述（英文）")
     strength: int = Field(5, ge=1, le=10, description="关系强度（1-10）")
     direction: str = Field("双向", description="关系方向：双向、A→B、B→A")
     evidence_chapters: list[int] = Field(
@@ -36,7 +32,6 @@ class CharacterRelation(BaseModel):
     change_over_time: str = Field(
         "", description="关系随时间的变化（从敌对到友好等）"
     )
->>>>>>> main
 
 
 class Character(BaseModel):
@@ -44,33 +39,21 @@ class Character(BaseModel):
 
     name: str = Field(..., description="角色姓名（中文）")
     english_name: str = Field("", description="英文名/翻译名")
-<<<<<<< HEAD
-    aliases: list[str] = Field(default_factory=list, description="别名列表")
+    aliases: list[str] = Field(default_factory=list, description="别名/绰号列表")
     gender: str = Field("", description="性别: 男/女/未知")
     age: str = Field("", description="年龄描述")
     role: CharacterRole = Field(CharacterRole.MINOR, description="角色定位")
     importance: int = Field(0, description="重要度评分 0-10，基于出场频率和剧情影响")
     first_appearance: int = Field(0, description="首次出场章节编号")
-    appearance: str = Field("", description="外貌特征（英文，供视频生成参考）")
-    personality: str = Field("", description="性格描述（英文）")
-    background: str = Field("", description="背景故事（英文）")
-    voice_tone: str = Field("", description="说话风格/语气特征（英文）")
-=======
-    aliases: list[str] = Field(default_factory=list, description="别名/绰号列表")
-    gender: str = Field("", description="性别")
-    age: str = Field("", description="年龄/年龄描述")
-    appearance: str = Field("", description="外貌特征")
-    personality: str = Field("", description="性格描述")
-    background: str = Field("", description="背景故事")
-    role_type: str = Field("配角", description="角色定位：主角、重要配角、配角、龙套")
-    importance_score: float = Field(0.0, ge=0.0, le=1.0, description="重要性评分（0-1）")
-    first_appearance: int = Field(0, description="首次出场章节")
     last_appearance: int = Field(0, description="最后出场章节")
     appearance_chapters: list[int] = Field(
         default_factory=list, description="出场章节编号列表"
     )
+    appearance: str = Field("", description="外貌特征（英文，供视频生成参考）")
+    personality: str = Field("", description="性格描述（英文）")
+    background: str = Field("", description="背景故事（英文）")
+    voice_tone: str = Field("", description="说话风格/语气特征（英文）")
     total_dialogue_lines: int = Field(0, description="总对话行数（估算）")
->>>>>>> main
     relations: list[CharacterRelation] = Field(
         default_factory=list, description="与其他角色的关系"
     )
@@ -91,7 +74,6 @@ class CharacterList(BaseModel):
     def find_by_english_name(self, english_name: str) -> Character | None:
         """按英文名查找角色。"""
         for c in self.characters:
-<<<<<<< HEAD
             if c.english_name.lower() == english_name.lower():
                 return c
         return None
@@ -103,6 +85,10 @@ class CharacterList(BaseModel):
             key=lambda c: c.importance,
             reverse=True,
         )
+
+    def get_protagonists(self) -> list[Character]:
+        """获取主角列表。"""
+        return [c for c in self.characters if c.role == CharacterRole.PROTAGONIST]
 
     def merge(self, other: "CharacterList") -> "CharacterList":
         """合并另一个角色列表（增量分析时使用）。
@@ -163,16 +149,16 @@ class CharacterList(BaseModel):
 
 def _merge_characters(a: Character, b: Character) -> Character:
     """合并两个同名角色的信息。策略：非空值优先，重要度取最高。"""
-    # 别名合并
     aliases = list(set(a.aliases + b.aliases))
 
-    # 关系合并（按 target 去重）
     relations = list(a.relations)
     seen_targets = {r.target for r in relations}
     for r in b.relations:
         if r.target not in seen_targets:
             relations.append(r)
             seen_targets.add(r.target)
+
+    appearance_chapters = sorted(set(a.appearance_chapters + b.appearance_chapters))
 
     return Character(
         name=a.name,
@@ -186,61 +172,18 @@ def _merge_characters(a: Character, b: Character) -> Character:
             a.first_appearance if a.first_appearance > 0 else 99999,
             b.first_appearance if b.first_appearance > 0 else 99999,
         ) or 0,
+        last_appearance=max(a.last_appearance, b.last_appearance),
+        appearance_chapters=appearance_chapters,
         appearance=a.appearance or b.appearance,
         personality=a.personality or b.personality,
         background=a.background or b.background,
         voice_tone=a.voice_tone or b.voice_tone,
+        total_dialogue_lines=a.total_dialogue_lines + b.total_dialogue_lines,
         relations=relations,
     )
-=======
-            if c.english_name == english_name:
-                return c
-        return None
 
-    def get_protagonists(self) -> list[Character]:
-        """获取主角列表。"""
-        return [c for c in self.characters if c.role_type == "主角"]
 
-    def get_characters_sorted_by_importance(self) -> list[Character]:
-        """按重要性降序排列。"""
-        return sorted(
-            self.characters, key=lambda c: c.importance_score, reverse=True
-        )
-
-    def get_relation_graph(self) -> "CharacterGraph":
-        """从角色关系中构建关系图谱。"""
-        nodes = []
-        edges = []
-
-        for char in self.characters:
-            nodes.append(
-                CharacterNode(
-                    id=char.name,
-                    name=char.name,
-                    english_name=char.english_name,
-                    role_type=char.role_type,
-                    importance_score=char.importance_score,
-                    appearance_count=len(char.appearance_chapters),
-                )
-            )
-            for rel in char.relations:
-                # 避免重复边（A→B 和 B→A）
-                edge_key = tuple(sorted([char.name, rel.target]))
-                if not any(
-                    e.source == rel.target and e.target == char.name for e in edges
-                ):
-                    edges.append(
-                        CharacterEdge(
-                            source=char.name,
-                            target=rel.target,
-                            relation=rel.relation,
-                            description=rel.description,
-                            strength=rel.strength,
-                            direction=rel.direction,
-                        )
-                    )
-
-        return CharacterGraph(nodes=nodes, edges=edges)
+# ── 关系图谱 ──
 
 
 class CharacterNode(BaseModel):
@@ -249,8 +192,8 @@ class CharacterNode(BaseModel):
     id: str = Field(..., description="节点唯一标识")
     name: str = Field(..., description="角色名")
     english_name: str = Field("", description="英文名")
-    role_type: str = Field("配角", description="角色定位")
-    importance_score: float = Field(0.0, ge=0.0, le=1.0, description="重要性评分")
+    role: CharacterRole = Field(CharacterRole.MINOR, description="角色定位")
+    importance: int = Field(0, description="重要度 0-10")
     appearance_count: int = Field(0, description="出场章节数")
 
 
@@ -277,14 +220,52 @@ class CharacterGraph(BaseModel):
             "total_characters": len(self.nodes),
             "total_relationships": len(self.edges),
             "protagonists": len(
-                [n for n in self.nodes if n.role_type == "主角"]
+                [n for n in self.nodes if n.role == CharacterRole.PROTAGONIST]
             ),
             "avg_importance": (
-                sum(n.importance_score for n in self.nodes) / len(self.nodes)
+                sum(n.importance for n in self.nodes) / len(self.nodes)
                 if self.nodes
                 else 0
             ),
         }
+
+
+def build_relation_graph(character_list: CharacterList) -> CharacterGraph:
+    """从角色列表构建关系图谱。"""
+    nodes = []
+    edges = []
+
+    for char in character_list.characters:
+        nodes.append(
+            CharacterNode(
+                id=char.name,
+                name=char.name,
+                english_name=char.english_name,
+                role=char.role,
+                importance=char.importance,
+                appearance_count=len(char.appearance_chapters),
+            )
+        )
+        for rel in char.relations:
+            # 避免重复边（A→B 和 B→A）
+            if not any(
+                e.source == rel.target and e.target == char.name for e in edges
+            ):
+                edges.append(
+                    CharacterEdge(
+                        source=char.name,
+                        target=rel.target,
+                        relation=rel.relation,
+                        description=rel.description,
+                        strength=rel.strength,
+                        direction=rel.direction,
+                    )
+                )
+
+    return CharacterGraph(nodes=nodes, edges=edges)
+
+
+# ── 分析结果 ──
 
 
 class ChapterCharacterAppearance(BaseModel):
@@ -292,30 +273,16 @@ class ChapterCharacterAppearance(BaseModel):
 
     chapter_number: int = Field(..., description="章节编号")
     chapter_title: str = Field("", description="章节标题")
-    characters: list[str] = Field(
-        default_factory=list, description="本出场角色名列表"
-    )
-    main_character: str = Field("", description="本章核心角色（视角角色）")
-    new_characters: list[str] = Field(
-        default_factory=list, description="本章首次出场的角色"
-    )
-    key_relations: list[dict] = Field(
-        default_factory=list,
-        description="本章关键关系变化，如 [{\"source\": \"A\", \"target\": \"B\", \"change\": \"从敌对到合作\"}]",
-    )
+    characters: list[str] = Field(default_factory=list, description="本章出场角色名列表")
+    new_characters: list[str] = Field(default_factory=list, description="本章首次出场的角色")
 
 
 class CharacterAnalysisResult(BaseModel):
     """角色分析的完整输出结果。"""
 
-    character_list: CharacterList = Field(
-        default_factory=CharacterList, description="完整的角色列表"
-    )
-    relation_graph: CharacterGraph = Field(
-        default_factory=CharacterGraph, description="关系图谱"
-    )
+    character_list: CharacterList = Field(default_factory=CharacterList, description="完整的角色列表")
+    relation_graph: CharacterGraph = Field(default_factory=CharacterGraph, description="关系图谱")
     chapter_appearances: list[ChapterCharacterAppearance] = Field(
         default_factory=list, description="各章出场信息"
     )
     total_chapters: int = Field(0, description="总分析章节数")
->>>>>>> main
