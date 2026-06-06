@@ -132,9 +132,12 @@ class Orchestrator:
         script = self.yaml_builder.run(
             novel_name=novel_dir.name,
             chapter_scripts=chapter_scripts,
+            characters=char_list,
+            chapter_report=chapter_report,
+            genre="",
         )
 
-        # ── Step 6: 校验 ──
+        # ── Step 6: 校验 + 自动修复 ──
         validation = self.validator.run(script=script)
         if not validation.is_valid:
             logger.error(f"校验失败: {validation.summary()}")
@@ -143,6 +146,9 @@ class Orchestrator:
         if validation.warnings:
             for warn in validation.warnings:
                 logger.warning(f"  ⚠ {warn}")
+        if validation.fixes_applied:
+            for fix in validation.fixes_applied:
+                logger.info(f"  🔧 {fix}")
 
         # ── Step 7: 导出 YAML ──
         output_path = self.settings.output_base / novel_dir.name
@@ -153,6 +159,7 @@ class Orchestrator:
         logger.info(
             f"✓ 处理完成: {len(script.chapters)} 章, "
             f"{script.total_scenes()} 场景, "
+            f"{script.total_beats()} 节拍, "
             f"{script.total_shots()} 镜头 ({elapsed:.1f}s)"
         )
         logger.info(f"{'='*50}")
