@@ -20,6 +20,8 @@ env/
 
 # Generated outputs
 output/
+uploads/
+checkpoints/
 
 # Novel input files (user data)
 # novels/
