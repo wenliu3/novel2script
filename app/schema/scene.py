@@ -102,6 +102,21 @@ class DialogueLine(BaseModel):
     action: str = Field("", description="伴随动作描述")
 
 
+# ── PR-05: 节拍模型（叙述 → 对白 + 动作的最小叙事单元） ──
+
+
+class Beat(BaseModel):
+    """剧本节拍：动作或对白的最小叙事单元。
+
+    由 DialogueAgent 从小说叙述中提取。
+    是连接小说叙事和影视脚本的中间层。
+    """
+
+    type: str = Field(..., description="节拍类型：action（动作）| dialogue（对白）| narration（旁白）")
+    character: str = Field("", description="角色名（对白为说话者，动作为执行者）")
+    content: str = Field(..., description="内容描述（中文）")
+
+
 # 解决前向引用
 Shot.model_rebuild()
 
@@ -122,7 +137,18 @@ class Scene(BaseModel):
     props: list[str] = Field(default_factory=list, description="关键道具列表")
     characters_present: list[str] = Field(default_factory=list, description="本场景出场角色（英文名）")
     continuity_notes: str = Field("", description="连续性备注（角色状态、位置等）")
+    beats: list[Beat] = Field(default_factory=list, description="节拍列表（由 DialogueAgent 生成）")
     shots: list[Shot] = Field(default_factory=list, description="镜头列表")
+
+    @property
+    def action_beats(self) -> list[Beat]:
+        """获取所有动作节拍。"""
+        return [b for b in self.beats if b.type == "action"]
+
+    @property
+    def dialogue_beats(self) -> list[Beat]:
+        """获取所有对白节拍。"""
+        return [b for b in self.beats if b.type == "dialogue"]
 
     @property
     def total_duration(self) -> float:
