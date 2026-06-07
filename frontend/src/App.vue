@@ -169,8 +169,8 @@ chapters:
       </div>
     </div>
 
-    <!-- 步骤条 -->
-    <div class="stepper">
+    <!-- 步骤条（转换流程才显示） -->
+    <div v-if="step !== 'upload' && step !== 'yaml-visual'" class="stepper">
       <div class="stepper-item" :class="{ active: stepIndex >= 0, done: stepIndex > 0 }">
         <span class="stepper-num">1</span>
         <span class="stepper-label">上传小说</span>
@@ -189,30 +189,60 @@ chapters:
 
     <main class="main">
 
-      <!-- Step 1: 上传 + 转换（合并） -->
-      <section v-if="step === 'upload'" class="card">
-        <h2>📄 上传小说</h2>
-        <div class="form-group">
-          <label>小说名称</label>
-          <input v-model="novelName" placeholder="如：神雕侠侣" />
+      <!-- 首页：两个功能入口 -->
+      <template v-if="step === 'upload'">
+        <div class="feature-grid">
+          <!-- 功能1：小说转剧本 -->
+          <div class="card feature-card">
+            <div class="feature-icon">📄</div>
+            <h2>小说转剧本</h2>
+            <p class="feature-desc">上传 TXT 小说文件，AI 自动转换为结构化 YAML 剧本</p>
+            <div class="form-group">
+              <label>小说名称</label>
+              <input v-model="novelName" placeholder="如：神雕侠侣" />
+            </div>
+            <div class="upload-area" @dragover.prevent @drop.prevent="onDrop">
+              <input type="file" accept=".txt" @change="onFileChange" ref="fileInput" id="file-input" hidden />
+              <label for="file-input" class="upload-label">
+                <template v-if="selectedFile">
+                  <span class="file-name">📎 {{ selectedFile.name }} ({{ (selectedFile.size / 1024).toFixed(1) }}KB)</span>
+                  <span class="file-change">重新选择</span>
+                </template>
+                <template v-else>
+                  <span class="upload-icon">📁</span>
+                  <span>点击选择 TXT 文件，或拖拽到此处</span>
+                </template>
+              </label>
+            </div>
+            <button class="btn-primary" :disabled="!canUpload" @click="doUpload">
+              {{ uploading ? '上传中...' : '上传并开始转换' }}
+            </button>
+          </div>
+
+          <!-- 功能2：YAML 可视化预览 -->
+          <div class="card feature-card">
+            <div class="feature-icon">🎬</div>
+            <h2>剧本可视化</h2>
+            <p class="feature-desc">上传已有的 YAML 剧本文件，以可视化剧本排版展示</p>
+            <div class="upload-area upload-area-alt" @dragover.prevent @drop.prevent="onYamlDrop">
+              <input type="file" accept=".yaml,.yml" @change="onYamlFileChange" id="yaml-input" hidden />
+              <label for="yaml-input" class="upload-label">
+                <template v-if="selectedYamlFile">
+                  <span class="file-name">📎 {{ selectedYamlFile.name }}</span>
+                  <span class="file-change">重新选择</span>
+                </template>
+                <template v-else>
+                  <span class="upload-icon">📋</span>
+                  <span>点击选择 YAML 文件，或拖拽到此处</span>
+                </template>
+              </label>
+            </div>
+            <button class="btn-secondary" :disabled="!selectedYamlFile" @click="doLoadYaml">
+              查看剧本
+            </button>
+          </div>
         </div>
-        <div class="upload-area" @dragover.prevent @drop.prevent="onDrop">
-          <input type="file" accept=".txt" @change="onFileChange" ref="fileInput" id="file-input" hidden />
-          <label for="file-input" class="upload-label">
-            <template v-if="selectedFile">
-              <span class="file-name">📎 {{ selectedFile.name }} ({{ (selectedFile.size / 1024).toFixed(1) }}KB)</span>
-              <span class="file-change">重新选择</span>
-            </template>
-            <template v-else>
-              <span class="upload-icon">📁</span>
-              <span>点击选择 TXT 文件，或拖拽到此处</span>
-            </template>
-          </label>
-        </div>
-        <button class="btn-primary" :disabled="!canUpload" @click="doUpload">
-          {{ uploading ? '上传中...' : '上传并开始转换' }}
-        </button>
-      </section>
+      </template>
 
       <!-- Step 2: 进度 -->
       <section v-if="step === 'progress'" class="card">
@@ -235,13 +265,36 @@ chapters:
         <p>转换完成，可进行预览或者下载</p>
 
         <div v-if="previewLoading" class="preview-loading">⏳ 加载预览中...</div>
-        <div v-else-if="yamlContent" class="preview-area">
-          <div class="preview-header">
-            <span>📋 YAML 预览</span>
-            <button class="btn-copy" @click="copyYaml">复制</button>
+        <template v-else-if="yamlContent">
+          <!-- 视图切换 -->
+          <div class="view-toggle">
+            <button
+              class="toggle-btn" :class="{ active: viewMode === 'visual' }"
+              @click="viewMode = 'visual'"
+            >📖 剧本视图</button>
+            <button
+              class="toggle-btn" :class="{ active: viewMode === 'raw' }"
+              @click="viewMode = 'raw'"
+            >{ } 原始 YAML</button>
           </div>
-          <pre class="preview-content">{{ yamlContent }}</pre>
-        </div>
+
+          <!-- 可视化剧本 -->
+          <div v-if="viewMode === 'visual'" class="preview-area">
+            <div v-if="parsedData" class="screenplay-wrapper">
+              <ScreenplayView :data="parsedData" />
+            </div>
+            <div v-else class="preview-loading">YAML 解析失败，请切换到原始视图查看</div>
+          </div>
+
+          <!-- 原始 YAML -->
+          <div v-else class="preview-area">
+            <div class="preview-header">
+              <span>📋 YAML 预览</span>
+              <button class="btn-copy" @click="copyYaml">复制</button>
+            </div>
+            <pre class="preview-content">{{ yamlContent }}</pre>
+          </div>
+        </template>
 
         <button class="btn-primary" @click="doDownload">📥 下载 YAML 剧本</button>
         <button class="btn-secondary" @click="reset">转换另一本</button>
@@ -254,6 +307,34 @@ chapters:
         <button class="btn-secondary" @click="reset">重试</button>
       </section>
 
+      <!-- YAML 可视化预览（独立功能） -->
+      <section v-if="step === 'yaml-visual'" class="card">
+        <div class="yaml-visual-header">
+          <h2>🎬 剧本预览</h2>
+          <button class="btn-back" @click="reset">← 返回</button>
+        </div>
+
+        <div class="view-toggle">
+          <button class="toggle-btn" :class="{ active: viewMode === 'visual' }" @click="viewMode = 'visual'">📖 剧本视图</button>
+          <button class="toggle-btn" :class="{ active: viewMode === 'raw' }" @click="viewMode = 'raw'">{ } 原始 YAML</button>
+        </div>
+
+        <div v-if="viewMode === 'visual'" class="preview-area">
+          <div v-if="parsedData" class="screenplay-wrapper">
+            <ScreenplayView :data="parsedData" />
+          </div>
+          <div v-else class="preview-loading">YAML 解析失败，请切换到原始视图查看</div>
+        </div>
+
+        <div v-else class="preview-area">
+          <div class="preview-header">
+            <span>📋 YAML 预览</span>
+            <button class="btn-copy" @click="copyYaml">复制</button>
+          </div>
+          <pre class="preview-content">{{ yamlContent }}</pre>
+        </div>
+      </section>
+
     </main>
 
     <footer class="footer">
@@ -264,6 +345,8 @@ chapters:
 
 <script setup>
 import { ref, computed } from 'vue'
+import yaml from 'js-yaml'
+import ScreenplayView from './components/ScreenplayView.vue'
 import { uploadNovelFiles, startConvert, fetchTaskStatus, previewYaml, downloadYaml } from './api'
 
 const step = ref('upload')
@@ -284,8 +367,20 @@ const progressPercent = ref(0)
 const yamlContent = ref('')
 const previewLoading = ref(false)
 const showSchema = ref(false)
+const viewMode = ref('visual') // 'visual' | 'raw'
+
+const parsedData = computed(() => {
+  if (!yamlContent.value) return null
+  try {
+    return yaml.load(yamlContent.value)
+  } catch {
+    return null
+  }
+})
 
 const canUpload = computed(() => novelName.value.trim() && selectedFile.value && !uploading.value)
+
+const selectedYamlFile = ref(null)
 
 function onFileChange(e) {
   const f = e.target.files[0]
@@ -297,6 +392,30 @@ function onDrop(e) {
   if (f && f.name.endsWith('.txt')) {
     selectedFile.value = f
   }
+}
+
+function onYamlFileChange(e) {
+  const f = e.target.files[0]
+  if (f) selectedYamlFile.value = f
+}
+
+function onYamlDrop(e) {
+  const f = e.dataTransfer.files[0]
+  if (f && (f.name.endsWith('.yaml') || f.name.endsWith('.yml'))) {
+    selectedYamlFile.value = f
+  }
+}
+
+function doLoadYaml() {
+  const file = selectedYamlFile.value
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    yamlContent.value = e.target.result
+    viewMode.value = 'visual'
+    step.value = 'yaml-visual'
+  }
+  reader.readAsText(file)
 }
 
 // 合并：上传后直接开始转换
@@ -384,12 +503,14 @@ function reset() {
   step.value = 'upload'
   novelName.value = ''
   selectedFile.value = null
+  selectedYamlFile.value = null
   taskId.value = ''
   taskStatus.value = ''
   taskMessage.value = ''
   progressPercent.value = 0
   yamlContent.value = ''
   previewLoading.value = false
+  viewMode.value = 'visual'
 }
 </script>
 
@@ -483,11 +604,34 @@ body {
 .stepper-line.active { background: var(--gradient-primary); }
 
 /* 主区域 */
-.main { flex: 1; max-width: 640px; width: 100%; margin: 28px auto; padding: 0 24px; }
+.main { flex: 1; max-width: 960px; width: 100%; margin: 28px auto; padding: 0 24px; }
+
+/* 首页双卡 */
+.feature-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+}
+@media (max-width: 768px) {
+  .feature-grid { grid-template-columns: 1fr; }
+}
+.feature-card {
+  background: var(--bg-card); border-radius: 16px; padding: 32px;
+  border: 1px solid var(--border); box-shadow: var(--shadow-md);
+}
+.feature-icon { font-size: 32px; margin-bottom: 12px; }
+.feature-card h2 { margin-bottom: 8px; font-size: 18px; font-weight: 700; }
+.feature-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+.upload-area-alt {
+  background: #faf5ff; border-color: #e9d5ff;
+}
+.upload-area-alt:hover {
+  border-color: #a855f7; background: #f5f3ff;
+}
+
+/* 非首页卡片 */
 .card {
   background: var(--bg-card); border-radius: 16px; padding: 36px;
   border: 1px solid var(--border); box-shadow: var(--shadow-md);
-  transition: box-shadow 0.3s;
+  max-width: 640px; margin: 0 auto; width: 100%;
 }
 .card h2 { margin-bottom: 24px; font-size: 20px; font-weight: 700; }
 .card.success { border-color: var(--success); background: var(--success-light); }
@@ -575,6 +719,26 @@ body {
 }
 
 /* 预览 */
+.view-toggle {
+  display: flex; gap: 0; margin: 20px 0 16px;
+  background: var(--bg); border-radius: 10px; padding: 4px;
+}
+.toggle-btn {
+  flex: 1; padding: 9px 16px; border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  background: transparent; color: var(--text-muted);
+  transition: all 0.2s;
+}
+.toggle-btn.active {
+  background: var(--bg-card); color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+.toggle-btn:hover:not(.active) { color: var(--text); }
+.screenplay-wrapper {
+  max-height: 520px; overflow-y: auto; padding: 24px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  margin: 16px 0;
+}
 .preview-loading {
   padding: 24px; text-align: center; color: var(--text-muted); font-size: 14px;
   background: var(--bg); border-radius: 10px; margin-bottom: 20px;
@@ -653,4 +817,15 @@ body {
   border-top: 1px solid var(--border); margin-top: auto;
   letter-spacing: 0.02em;
 }
+.yaml-visual-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.yaml-visual-header h2 { margin-bottom: 0; }
+.btn-back {
+  background: none; border: none; color: var(--primary); font-size: 14px;
+  font-weight: 500; cursor: pointer; padding: 6px 12px; border-radius: 6px;
+  transition: background 0.2s;
+}
+.btn-back:hover { background: var(--primary-light); }
 </style>
