@@ -1,8 +1,8 @@
 # novel2script
 
-中文网络小说 → LRM 剧本 YAML 的自动转换系统。
+AI 辅助剧本创作工具：将中文网络小说自动转换为 LRM 剧本 YAML。
 
-输入一篇 TXT 小说，自动按章节切分 → 多线程并行调用 LLM → 输出结构化 YAML 剧本。
+输入一篇 TXT 小说，自动按章节切分 → 多线程并行调用 LLM → 输出结构化 YAML 剧本。作者可在线预览、复制或下载，快速获得可编辑、可进一步打磨的剧本初稿。
 
 ## 架构
 
@@ -52,10 +52,10 @@ cd frontend && npm install && npm run dev
 ## 使用流程
 
 1. 打开 http://localhost:3000
-2. 输入小说名称，选择 TXT 文件上传（支持多文件，自动合并）
+2. 输入小说名称，选择 TXT 文件上传
 3. 点击「开始转换」，后台并行处理
-4. 进度实时更新（每 3 秒轮询一次）
-5. 完成后下载生成的 YAML 剧本
+4. 进度实时更新（每 3 秒轮询一次，显示已完成章节 / 总章节数）
+5. 完成后在线预览 YAML 内容，支持复制或下载
 
 百万字小说预计需要 5–15 分钟，取决于章节数量和 LLM 响应速度。
 
@@ -67,7 +67,7 @@ app/
 ├── config.py         # 配置加载（环境变量）
 ├── llm.py            # LLM 封装（OpenAI 兼容，指数退避重试）
 ├── models.py         # 数据模型（Pydantic v2，宽松 Schema）
-├── api.py            # 4 个 REST 端点
+├── api.py            # REST 端点
 └── core/
     ├── splitter.py   # 编码检测 + 章节识别 + 文本切分
     ├── agent.py      # ScriptAgent — 调用 LLM，输出 YAML
@@ -75,9 +75,12 @@ app/
     └── pipeline.py   # 主流水线（并行转换 + 合并 + 导出）
 
 frontend/src/
-├── App.vue           # 单页应用（上传 → 转换 → 进度 → 下载）
+├── App.vue           # 单页应用（上传 → 转换 → 进度 → 预览/下载 + 格式规范弹窗）
 ├── main.js
 └── api/index.js      # Axios 封装
+
+docs/
+└── yaml-schema.md    # 剧本 YAML Schema 定义 + 设计原因
 
 uploads/{小说名}/origin/  # 上传的原始 TXT 文件
 output/{小说名}/          # 输出的 YAML 文件
@@ -88,9 +91,10 @@ output/{小说名}/          # 输出的 YAML 文件
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/` | 健康检查 |
-| POST | `/api/upload` | 上传 TXT 文件（支持多文件） |
+| POST | `/api/upload` | 上传 TXT 文件 |
 | POST | `/api/convert` | 触发转换（后台异步运行） |
 | GET | `/api/status/{task_id}` | 查询任务状态和进度 |
+| GET | `/api/preview/{name}` | 预览生成的 YAML 内容 |
 | GET | `/api/download/{name}` | 下载生成的 YAML 文件 |
 
 任务状态值：`pending` → `processing` → `completed` / `failed`
@@ -100,19 +104,18 @@ output/{小说名}/          # 输出的 YAML 文件
 | 变量 | 必需 | 代码默认值 | 说明 |
 |------|------|-----------|------|
 | `MILM_API_KEY` | ✅ | — | LLM API 密钥 |
-| `MILM_BASE_URL` | ❌ | `https://api.xiaomi.com/v1` | OpenAI 兼容 API 端点 |
-| `MILM_MODEL` | ❌ | `milm` | 模型名称 |
+| `MILM_BASE_URL` | ❌ | `https://token-plan-cn.xiaomimimo.com/v1` | OpenAI 兼容 API 端点 |
+| `MILM_MODEL` | ❌ | `mimo-v2.5` | 模型名称 |
 | `TEMPERATURE` | ❌ | `0.7` | 生成温度（0.0–1.0） |
 | `MAX_TOKENS` | ❌ | `16000` | 单次最大输出 token |
 | `CHUNK_SIZE` | ❌ | `100000` | 每块最大字符数 |
-| `CHUNK_OVERLAP` | ❌ | `5000` | 相邻块重叠字符数 |
 | `OUTPUT_BASE` | ❌ | `output` | 输出目录 |
 
 `.env.example` 中预填了一组可用的示例值（小米 MiMo 接口），可按需替换为 GPT / DeepSeek 等任意 OpenAI 兼容接口。
 
 ## 输出格式
 
-完整 Schema 见 [docs/yaml-schema.md](docs/yaml-schema.md)。输出示例：
+完整 Schema 见 [docs/yaml-schema.md](docs/yaml-schema.md)，前端「📖 格式规范」弹窗中也可查看。输出示例：
 
 ```yaml
 # LRM 剧本 - 由 novel2script 生成
@@ -152,16 +155,6 @@ LLM 输出的 YAML 会经过自动修复，以下问题均可处理：
 | 中文冒号 `：` | 替换为英文 `: ` |
 | Markdown 代码块包裹 | 自动去除 |
 | YAML 解析仍失败 | 触发一次 LLM 重试 |
-
-## 运行测试
-
-> ⚠️ 注意：`tests/test_mvp.py` 中 `TestPipelineMerge` 的测试用例目前与 `pipeline._merge_results` 的函数签名不匹配（测试传 2-tuple，函数期望 3-tuple），运行前需先修复。
-
-其余测试：
-
-```bash
-pytest tests/ -v -k "not TestPipelineMerge"
-```
 
 ## 技术栈
 
