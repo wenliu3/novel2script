@@ -2,12 +2,22 @@
 
 AI 辅助剧本创作工具：将中文网络小说自动转换为 LRM 剧本 YAML。
 
+![首页截图](docs/screenshot.png)
+
 输入一篇 TXT 小说，自动按章节切分 → 多线程并行调用 LLM → 输出结构化 YAML 剧本。作者可在线预览、复制或下载，快速获得可编辑、可进一步打磨的剧本初稿。
+
+## 功能特性
+
+- **小说转剧本** — 上传 TXT 小说，AI 自动转换为结构化 YAML 剧本
+- **剧本可视化** — 上传已有 YAML 剧本，以可视化排版展示（章节、场景、对白、动作）
+- **格式规范文档** — 内置 YAML Schema 参考，作者可随时查看字段说明
+- **智能切分** — 支持 UTF-8 / GBK / GB18030 / Big5 等编码自动识别，按章节正则切分
+- **并行处理** — 多线程同时转换多个章节，大幅加速
 
 ## 架构
 
 ```
-TXT 小说（支持 UTF-8 / GBK / GB18030 / Big5 等编码自动识别）
+TXT 小说
   │
   ▼
 Splitter（智能切分）                          纯 Python
@@ -51,11 +61,19 @@ cd frontend && npm install && npm run dev
 
 ## 使用流程
 
+### 小说转剧本
+
 1. 打开 http://localhost:3000
-2. 输入小说名称，选择 TXT 文件上传
-3. 点击「开始转换」，后台并行处理
+2. 在「小说转剧本」卡片输入小说名称，选择 TXT 文件上传
+3. 点击「上传并开始转换」，后台并行处理
 4. 进度实时更新（每 3 秒轮询一次，显示已完成章节 / 总章节数）
-5. 完成后在线预览 YAML 内容，支持复制或下载
+5. 完成后默认显示可视化剧本视图，也可切换到原始 YAML 查看或下载
+
+### 剧本可视化
+
+1. 在「剧本可视化」卡片上传已有的 YAML 剧本文件
+2. 点击「查看剧本」，即可以可视化排版展示
+3. 支持「剧本视图」和「原始 YAML」两种模式切换
 
 百万字小说预计需要 5–15 分钟，取决于章节数量和 LLM 响应速度。
 
@@ -75,12 +93,15 @@ app/
     └── pipeline.py   # 主流水线（并行转换 + 合并 + 导出）
 
 frontend/src/
-├── App.vue           # 单页应用（上传 → 转换 → 进度 → 预览/下载 + 格式规范弹窗）
+├── App.vue                     # 单页应用（双功能入口 + 转换流程 + 预览）
+├── components/
+│   └── ScreenplayView.vue      # YAML 可视化剧本组件
 ├── main.js
-└── api/index.js      # Axios 封装
+└── api/index.js                # Axios 封装
 
 docs/
-└── yaml-schema.md    # 剧本 YAML Schema 定义 + 设计原因
+├── yaml-schema.md    # 剧本 YAML Schema 定义 + 设计原因
+└── screenshot.png    # 前端界面截图
 
 uploads/{小说名}/origin/  # 上传的原始 TXT 文件
 output/{小说名}/          # 输出的 YAML 文件
@@ -166,7 +187,7 @@ LLM 输出的 YAML 会经过自动修复，以下问题均可处理：
 | 并行处理 | `concurrent.futures.ThreadPoolExecutor` |
 | 文本切分 | 正则章节检测 + 递归字符切分 |
 | LLM 重试 | Tenacity（指数退避，最多 4 次） |
-| 前端 | Vue 3 · Vite · Axios |
+| 前端 | Vue 3 · Vite · Axios · js-yaml |
 
 ## License
 
