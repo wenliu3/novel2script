@@ -47,10 +47,20 @@
         <p class="hint">处理时间取决于小说长度，百万字小说约需 5-15 分钟</p>
       </section>
 
-      <!-- Step 4: 完成 -->
+      <!-- Step 4: 完成 + 预览 -->
       <section v-if="step === 'done'" class="card success">
         <h2>✅ 转换完成</h2>
         <p>{{ taskMessage }}</p>
+
+        <div v-if="previewLoading" class="preview-loading">⏳ 加载预览中...</div>
+        <div v-else-if="yamlContent" class="preview-area">
+          <div class="preview-header">
+            <span>📋 YAML 预览</span>
+            <button class="btn-copy" @click="copyYaml">复制</button>
+          </div>
+          <pre class="preview-content">{{ yamlContent }}</pre>
+        </div>
+
         <button class="btn-primary" @click="doDownload">📥 下载 YAML 剧本</button>
         <button class="btn-secondary" @click="reset">转换另一本</button>
       </section>
@@ -68,7 +78,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { uploadNovelFiles, startConvert, fetchTaskStatus, downloadYaml } from './api'
+import { uploadNovelFiles, startConvert, fetchTaskStatus, previewYaml, downloadYaml } from './api'
 
 const step = ref('upload')
 const novelName = ref('')
@@ -79,6 +89,8 @@ const taskId = ref('')
 const taskStatus = ref('')
 const taskMessage = ref('')
 const progressPercent = ref(0)
+const yamlContent = ref('')
+const previewLoading = ref(false)
 
 const canUpload = computed(() => novelName.value.trim() && files.value.length > 0 && !uploading.value)
 
@@ -140,6 +152,7 @@ function pollStatus() {
         clearInterval(timer)
         step.value = 'done'
         progressPercent.value = 100
+        fetchPreview()
       } else if (result.status === 'failed') {
         clearInterval(timer)
         step.value = 'failed'
@@ -148,6 +161,27 @@ function pollStatus() {
       console.error('轮询失败:', e)
     }
   }, 3000)
+}
+
+async function fetchPreview() {
+  previewLoading.value = true
+  try {
+    const data = await previewYaml(novelName.value)
+    yamlContent.value = data.content
+  } catch (e) {
+    yamlContent.value = '# 预览加载失败: ' + (e.response?.data?.detail || e.message)
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+async function copyYaml() {
+  try {
+    await navigator.clipboard.writeText(yamlContent.value)
+    alert('已复制到剪贴板')
+  } catch {
+    alert('复制失败，请手动选择复制')
+  }
 }
 
 function doDownload() {
@@ -162,6 +196,8 @@ function reset() {
   taskStatus.value = ''
   taskMessage.value = ''
   progressPercent.value = 0
+  yamlContent.value = ''
+  previewLoading.value = false
 }
 </script>
 
@@ -224,4 +260,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 }
 .progress-fill { height: 100%; background: var(--primary); border-radius: 4px; transition: width 0.3s; }
 .hint { font-size: 12px; color: var(--text-muted); }
+.preview-loading {
+  padding: 20px; text-align: center; color: var(--text-muted); font-size: 14px;
+  background: var(--bg); border-radius: 8px; margin-bottom: 16px;
+}
+.preview-area { margin: 16px 0; }
+.preview-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px; font-size: 14px; font-weight: 500; color: var(--text-muted);
+}
+.btn-copy {
+  background: transparent; color: var(--primary); border: 1px solid var(--primary);
+  padding: 4px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+}
+.btn-copy:hover { background: var(--primary); color: white; }
+.preview-content {
+  background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 8px;
+  font-size: 13px; line-height: 1.5; overflow: auto; max-height: 400px;
+  white-space: pre-wrap; word-break: break-all; tab-size: 2;
+}
 </style>

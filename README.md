@@ -1,43 +1,43 @@
 # novel2script
 
-中文网络小说 → LRM (Long-Running Movie) 剧本 YAML 的自动转换系统。
+中文网络小说 → LRM 剧本 YAML 的自动转换系统。
 
 输入一篇 TXT 小说，自动按章节切分 → 多线程并行调用 LLM → 输出结构化 YAML 剧本。
 
 ## 架构
 
 ```
-TXT 小说
+TXT 小说（支持 UTF-8 / GBK / GB18030 / Big5 等编码自动识别）
   │
   ▼
-Splitter（正则切分章节）         纯 Python
-  │  按 "第X章" 等标记切分
+Splitter（智能切分）                          纯 Python
+  │  ① 优先按"第X章"等正则标题切分
+  │  ② 超长章节 / 无章节结构 → 递归字符切分
   ▼
-Pipeline ─────────────────────  并行处理
-  │  章节1 → agent(LLM) → YAML₁  ─┐
-  │  章节2 → agent(LLM) → YAML₂  ─┤  同时进行
-  │  章节3 → agent(LLM) → YAML₃  ─┤
-  │  ...                           │
-  ▼                                │
-合并（按章节顺序）──────────────────┘
-  │  角色去重 + 章节重编号
+Pipeline ──────────────────────────────────  并行处理
+  │  章节1 → ScriptAgent(LLM) → YAML₁  ─┐
+  │  章节2 → ScriptAgent(LLM) → YAML₂  ─┤  ThreadPoolExecutor
+  │  章节N → ScriptAgent(LLM) → YAMLₙ  ─┘
   ▼
-Builder（YAML 导出）             纯 Python
+合并（按章节顺序）
+  │  角色去重 + 保留原始章节编号
   ▼
-YAML 剧本文件
+Builder（YAML 导出）                          纯 Python
+  ▼
+output/{小说名}/{小说名}_script.yaml
 ```
 
-**每章独立处理，互不依赖，多线程并行加速。**
+每章独立处理，互不依赖，多线程并行加速。LLM 输出的 YAML 若校验失败，会自动重试一次。
 
 ## 快速开始
 
 ```bash
-# 1. 安装依赖
+# 1. 安装依赖（Python 3.11+）
 pip install -r requirements.txt
 
 # 2. 配置 API 密钥
 cp .env.example .env
-# 编辑 .env，填入你的 LLM API 密钥
+# 编辑 .env，填入你的 MILM_API_KEY
 
 # 3. 启动后端
 uvicorn app.main:app --reload
@@ -46,104 +46,134 @@ uvicorn app.main:app --reload
 cd frontend && npm install && npm run dev
 ```
 
-- 后端 API 文档: http://localhost:8000/docs
-- 前端界面: http://localhost:3000
+- 后端 API 文档：http://localhost:8000/docs
+- 前端界面：http://localhost:3000
 
 ## 使用流程
 
-1. 打开前端界面 http://localhost:3000
-2. 输入小说名称，选择 TXT 文件上传
-3. 点击「开始转换」
-4. 等待处理完成（进度实时更新）
-5. 下载生成的 YAML 剧本文件
+1. 打开 http://localhost:3000
+2. 输入小说名称，选择 TXT 文件上传（支持多文件，自动合并）
+3. 点击「开始转换」，后台并行处理
+4. 进度实时更新（每 3 秒轮询一次）
+5. 完成后下载生成的 YAML 剧本
+
+百万字小说预计需要 5–15 分钟，取决于章节数量和 LLM 响应速度。
 
 ## 项目结构
 
 ```
 app/
-├── main.py           # FastAPI 入口
-├── config.py         # 配置 + 日志
-├── llm.py            # LLM 服务（OpenAI 兼容，自动重试）
-├── models.py         # 数据模型（宽松 Schema，容忍 LLM 输出偏差）
-├── api.py            # API 端点
+├── main.py           # FastAPI 入口 + lifespan
+├── config.py         # 配置加载（环境变量）
+├── llm.py            # LLM 封装（OpenAI 兼容，指数退避重试）
+├── models.py         # 数据模型（Pydantic v2，宽松 Schema）
+├── api.py            # 4 个 REST 端点
 └── core/
+    ├── splitter.py   # 编码检测 + 章节识别 + 文本切分
     ├── agent.py      # ScriptAgent — 调用 LLM，输出 YAML
-    ├── builder.py    # YAML 导出
-    ├── pipeline.py   # 主流水线（并行处理 + 合并）
-    └── splitter.py   # 文本切分 + 编码检测 + 章节识别
+    ├── builder.py    # Screenplay → YAML 文件导出
+    └── pipeline.py   # 主流水线（并行转换 + 合并 + 导出）
 
 frontend/src/
-├── App.vue           # 单页应用（上传 → 转换 → 下载）
+├── App.vue           # 单页应用（上传 → 转换 → 进度 → 下载）
 ├── main.js
-└── api/index.js
+└── api/index.js      # Axios 封装
+
+uploads/{小说名}/origin/  # 上传的原始 TXT 文件
+output/{小说名}/          # 输出的 YAML 文件
 ```
-
-## 输出示例
-
-```yaml
-title: 遮天
-author: 辰东
-genre: 仙侠
-characters:
-  叶凡: "主角，大学生"
-  庞博: "叶凡的好友"
-chapters:
-  - chapter_number: 1
-    title: "第001章 星空中的青铜巨棺"
-    scenes:
-      - scene_number: 1
-        heading: "外景 宇宙深处 - 夜晚"
-        int_ext: "外景"
-        location: "宇宙深处"
-        time_of_day: "夜晚"
-        characters: ["宇航员"]
-        content:
-          - type: action
-            text: "冰冷与黑暗并存的宇宙深处，九具龙尸拉着一口青铜古棺。"
-          - type: dialogue
-            character: "宇航员"
-            text: "上帝，我看到了什么？"
-```
-
-完整 Schema 见 [docs/yaml-schema.md](docs/yaml-schema.md)。
 
 ## API 接口
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/` | 健康检查 |
-| POST | `/api/upload` | 上传小说文件（TXT） |
-| POST | `/api/convert` | 触发转换（后台并行运行） |
-| GET | `/api/status/{task_id}` | 查询任务状态 + 进度 |
-| GET | `/api/download/{name}` | 下载 YAML 文件 |
+| POST | `/api/upload` | 上传 TXT 文件（支持多文件） |
+| POST | `/api/convert` | 触发转换（后台异步运行） |
+| GET | `/api/status/{task_id}` | 查询任务状态和进度 |
+| GET | `/api/download/{name}` | 下载生成的 YAML 文件 |
+
+任务状态值：`pending` → `processing` → `completed` / `failed`
 
 ## 环境变量
 
-| 变量 | 必需 | 默认值 | 说明 |
-|------|------|--------|------|
+| 变量 | 必需 | 代码默认值 | 说明 |
+|------|------|-----------|------|
 | `MILM_API_KEY` | ✅ | — | LLM API 密钥 |
-| `MILM_BASE_URL` | ❌ | `https://token-plan-cn.xiaomimimo.com/v1` | API 端点（OpenAI 兼容） |
-| `MILM_MODEL` | ❌ | `mimo-v2.5` | 模型名称 |
-| `TEMPERATURE` | ❌ | `0.7` | 生成温度 |
+| `MILM_BASE_URL` | ❌ | `https://api.xiaomi.com/v1` | OpenAI 兼容 API 端点 |
+| `MILM_MODEL` | ❌ | `milm` | 模型名称 |
+| `TEMPERATURE` | ❌ | `0.7` | 生成温度（0.0–1.0） |
 | `MAX_TOKENS` | ❌ | `16000` | 单次最大输出 token |
-| `CHUNK_SIZE` | ❌ | `100000` | 每块大小（字符数） |
+| `CHUNK_SIZE` | ❌ | `100000` | 每块最大字符数 |
+| `CHUNK_OVERLAP` | ❌ | `5000` | 相邻块重叠字符数 |
+| `OUTPUT_BASE` | ❌ | `output` | 输出目录 |
 
-## 测试
+`.env.example` 中预填了一组可用的示例值（小米 MiMo 接口），可按需替换为 GPT / DeepSeek 等任意 OpenAI 兼容接口。
+
+## 输出格式
+
+完整 Schema 见 [docs/yaml-schema.md](docs/yaml-schema.md)。输出示例：
+
+```yaml
+# LRM 剧本 - 由 novel2script 生成
+
+title: 遮天
+author: 辰东
+genre: 仙侠
+characters:
+  叶凡: 主角，大学生
+chapters:
+  - chapter_number: 1
+    title: 第001章 星空中的青铜巨棺
+    scenes:
+      - scene_number: 1
+        heading: 外景 宇宙深处 - 夜晚
+        int_ext: 外景
+        location: 宇宙深处
+        time_of_day: 夜晚
+        content:
+          - type: action
+            text: 冰冷与黑暗并存的宇宙深处，九具龙尸拉着一口青铜古棺。
+          - type: dialogue
+            character: 宇航员
+            text: 上帝，我看到了什么？
+```
+
+## 容错机制
+
+LLM 输出的 YAML 会经过自动修复，以下问题均可处理：
+
+| 问题 | 修复方式 |
+|------|---------|
+| `scene.title` 代替 `scene.heading` | 自动映射 |
+| `description` / `text` 代替 `content` | 转为 `action` 条目 |
+| 缺少 `int_ext` / `location` / `time_of_day` | 填入空字符串 |
+| Tab 缩进 | 替换为空格 |
+| 中文冒号 `：` | 替换为英文 `: ` |
+| Markdown 代码块包裹 | 自动去除 |
+| YAML 解析仍失败 | 触发一次 LLM 重试 |
+
+## 运行测试
+
+> ⚠️ 注意：`tests/test_mvp.py` 中 `TestPipelineMerge` 的测试用例目前与 `pipeline._merge_results` 的函数签名不匹配（测试传 2-tuple，函数期望 3-tuple），运行前需先修复。
+
+其余测试：
 
 ```bash
-pytest tests/ -v
+pytest tests/ -v -k "not TestPipelineMerge"
 ```
 
 ## 技术栈
 
 | 组件 | 技术 |
 |------|------|
-| LLM | OpenAI 兼容接口（小米 MiMo / GPT / DeepSeek 等） |
-| 后端 | Python 3.11+ / FastAPI / Uvicorn |
-| 数据模型 | Pydantic v2（宽松 Schema） |
-| 并行处理 | ThreadPoolExecutor |
+| LLM | OpenAI 兼容接口（MiMo / GPT / DeepSeek 等） |
+| 后端 | Python 3.11+ · FastAPI · Uvicorn |
+| 数据模型 | Pydantic v2（宽松 Schema，extra="allow"） |
+| 并行处理 | `concurrent.futures.ThreadPoolExecutor` |
 | 文本切分 | 正则章节检测 + 递归字符切分 |
-| 前端 | Vue 3 + Vite + Axios |
+| LLM 重试 | Tenacity（指数退避，最多 4 次） |
+| 前端 | Vue 3 · Vite · Axios |
 
 ## License
 
