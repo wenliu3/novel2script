@@ -45,7 +45,8 @@ characters:
   角色名: "简介"
 chapters:
   - chapter_number: 1
-    title: "章节标题"
+    chapter_title: "原文章节全称，如'第二章 素问'"
+    title: "章节简短标题"
     scenes:
       - scene_number: 1
         heading: "内景 客栈 - 白天"
@@ -62,6 +63,9 @@ chapters:
             text: "对白内容"
 
 【注意】
+- chapter_number 必须是上方指定的编号，不要自行修改
+- chapter_title 填原文章节全称，如"第二章 素问"
+- title 填本章的简短标题
 - heading、int_ext、location、time_of_day、content 每个 scene 都必须有
 - content 是列表，每项必须有 type 和 text
 - 不要输出 ```yaml 标记
@@ -170,7 +174,7 @@ class ScriptAgent:
     def __init__(self, llm: LLM) -> None:
         self.llm = llm
 
-    def convert_chunk(self, text: str, chapter_title: str = "") -> str:
+    def convert_chunk(self, text: str, chapter_title: str = "", chapter_number: int = 0) -> str:
         """将一个文本块转换为 YAML 剧本。
 
         如果首次输出 YAML 校验失败，会自动重试一次。
@@ -178,8 +182,17 @@ class ScriptAgent:
         ch_inst = _chapter_instruction(text)
 
         title_inst = ""
-        if chapter_title:
-            title_inst = f'\n原文章节标题是「{chapter_title}」，请务必使用这个标题作为 chapter 的 title 字段。'
+        if chapter_title and chapter_number:
+            title_inst = (
+                f'\n这是小说的第 {chapter_number} 章，原标题是「{chapter_title}」。'
+                f'请将 chapter_number 设为 {chapter_number}，'
+                f'chapter_title 设为「第{chapter_number}章 {chapter_title}」，'
+                f'title 设为「{chapter_title}」。'
+            )
+        elif chapter_title:
+            title_inst = f'\n原文章节标题是「{chapter_title}」，请将 chapter_title 设为原标题，title 设为简短标题。'
+        elif chapter_number:
+            title_inst = f'\n这是小说的第 {chapter_number} 章，请将 chapter_number 设为 {chapter_number}。'
 
         prompt = CHUNK_TEMPLATE.format(
             chapter_instruction=ch_inst + title_inst,

@@ -21,14 +21,15 @@ logger = logging.getLogger(__name__)
 ProgressCallback = Callable[[int, int, str], None]
 
 
-def _convert_one_chunk(agent: ScriptAgent, chunk: TextChunk) -> tuple[int, str]:
-    """转换单个章节，返回 (章节索引, YAML 字符串)。"""
-    logger.info(f"转换第 {chunk.index + 1} 块（{len(chunk.text):,} 字）: {chunk.title}")
-    yaml_str = agent.convert_chunk(chunk.text, chapter_title=chunk.title)
-    return chunk.index, yaml_str
+def _convert_one_chunk(agent: ScriptAgent, chunk: TextChunk) -> tuple[int, int, str]:
+    """转换单个章节，返回 (排序索引, 章节编号, YAML 字符串)。"""
+    ch_num = chunk.chapter_number or (chunk.index + 1)
+    logger.info(f"转换第 {ch_num} 章（{len(chunk.text):,} 字）: {chunk.title}")
+    yaml_str = agent.convert_chunk(chunk.text, chapter_title=chunk.title, chapter_number=ch_num)
+    return chunk.index, ch_num, yaml_str
 
 
-def _merge_results(results: list[tuple[int, str]], novel_name: str = "") -> Screenplay:
+def _merge_results(results: list[tuple[int, int, str]], novel_name: str = "") -> Screenplay:
     """按章节索引排序后合并所有 YAML 结果。"""
     results.sort(key=lambda r: r[0])
 
@@ -38,12 +39,11 @@ def _merge_results(results: list[tuple[int, str]], novel_name: str = "") -> Scre
     genre = None
 
     all_chapter_dicts: list[dict] = []
-    chapter_counter = 0
 
-    for i, yaml_str in results:
+    for sort_idx, ch_num, yaml_str in results:
         data = _try_parse_yaml(yaml_str)
         if not data:
-            logger.warning(f"跳过第 {i + 1} 块（YAML 解析失败）")
+            logger.warning(f"跳过第 {ch_num} 章（YAML 解析失败）")
             continue
 
         data = fix_llm_data(data)
@@ -60,8 +60,7 @@ def _merge_results(results: list[tuple[int, str]], novel_name: str = "") -> Scre
             characters.update(chunk_chars)
 
         for ch in data.get("chapters", []):
-            chapter_counter += 1
-            ch["chapter_number"] = chapter_counter
+            ch["chapter_number"] = ch_num  # 保留原始章节编号
             all_chapter_dicts.append(ch)
 
     if not all_chapter_dicts:
@@ -75,7 +74,7 @@ def _merge_results(results: list[tuple[int, str]], novel_name: str = "") -> Scre
         chapters=all_chapter_dicts,
     )
 
-    logger.info(f"合并完成: {chapter_counter} 章, {len(characters)} 角色")
+    logger.info(f"合并完成: {len(all_chapter_dicts)} 章, {len(characters)} 角色")
     return screenplay
 
 
@@ -112,7 +111,7 @@ def run_pipeline(
     logger.info(f"切分为 {len(chunks)} 块，{max_workers} 线程并行处理")
 
     agent = ScriptAgent(llm)
-    results: list[tuple[int, str]] = []
+    results: list[tuple[int, int, str]] = []
     completed = 0
     total = len(chunks)
 
@@ -126,8 +125,8 @@ def run_pipeline(
         for future in as_completed(futures):
             chunk = futures[future]
             try:
-                idx, yaml_str = future.result()
-                results.append((idx, yaml_str))
+                idx, ch_num, yaml_str = future.result()
+                results.append((idx, ch_num, yaml_str))
                 completed += 1
                 if on_progress:
                     try:
