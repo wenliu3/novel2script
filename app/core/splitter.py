@@ -71,6 +71,7 @@ class TextChunk:
     is_first: bool = False
     is_last: bool = False
     title: str = ""  # 章节标题（按章节切分时填充）
+    chapter_number: int = 0  # 原始章节编号（从标题提取）
 
     @property
     def length(self) -> int:
@@ -196,19 +197,58 @@ def has_chapter_structure(text: str) -> bool:
     return False
 
 
-def split_by_chapters(text: str) -> list[tuple[str, str]]:
-    """按章节切分文本。返回 [(标题, 内容), ...]。"""
+# 中文数字 → 阿拉伯数字映射
+_CN_NUM_MAP = {
+    "零": 0, "一": 1, "二": 2, "三": 3, "四": 4,
+    "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
+    "十": 10, "百": 100, "千": 1000, "万": 10000,
+}
+
+
+def _extract_chapter_number(heading: str) -> int:
+    """从章节标题中提取章节编号。"""
+    # 阿拉伯数字: 第001章, 第1回
+    m = re.search(r"第\s*(\d+)", heading)
+    if m:
+        return int(m.group(1))
+    # 中文数字: 第一章, 第二回
+    m = re.search(r"第([一二三四五六七八九十百千万零\d]+)", heading)
+    if m:
+        cn_str = m.group(1)
+        if cn_str.isdigit():
+            return int(cn_str)
+        result, current = 0, 0
+        for char in cn_str:
+            if char in _CN_NUM_MAP:
+                val = _CN_NUM_MAP[char]
+                if val >= 10:
+                    if current == 0:
+                        current = 1
+                    result += current * val
+                    current = 0
+                else:
+                    current = current * 10 + val
+            elif char.isdigit():
+                current = current * 10 + int(char)
+        return result + current
+    return 0
+
+
+def split_by_chapters(text: str) -> list[tuple[int, str, str]]:
+    """按章节切分文本。返回 [(章节编号, 标题, 内容), ...]。"""
     for pattern, _ in CHAPTER_PATTERNS:
         matches = list(pattern.finditer(text))
         if len(matches) >= 2:
-            chapters = []
+            chapters: list[tuple[int, str, str]] = []
             for i, match in enumerate(matches):
-                title = match.group(1).strip() if match.lastindex else match.group(0).strip()
+                full_heading = match.group(0).strip()
+                title = match.group(1).strip() if match.lastindex else full_heading
+                chapter_num = _extract_chapter_number(full_heading)
                 start = match.end()
                 end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
                 content = text[start:end].strip()
                 if content:
-                    chapters.append((title, content))
+                    chapters.append((chapter_num, title, content))
             if chapters:
                 return chapters
     return []
@@ -240,14 +280,18 @@ def smart_split(text: str, chunk_size: int = 100_000, chunk_overlap: int = 0) ->
         if len(chapters) >= 2:
             logger.info(f"检测到 {len(chapters)} 个章节")
             chunks = []
-            for title, content in chapters:
+            for chapter_num, title, content in chapters:
                 if len(content) > chunk_size:
                     sub_chunks = splitter.split(content)
                     for sc in sub_chunks:
                         sc.title = title
+                        sc.chapter_number = chapter_num
                     chunks.extend(sub_chunks)
                 else:
-                    chunks.append(TextChunk(index=len(chunks), text=content, title=title))
+                    chunks.append(TextChunk(
+                        index=len(chunks), text=content,
+                        title=title, chapter_number=chapter_num,
+                    ))
             if chunks:
                 chunks[0].is_first = True
                 chunks[-1].is_last = True
