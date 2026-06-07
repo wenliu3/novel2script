@@ -11,7 +11,6 @@ from app.models import (
     Action,
     Character,
     CharacterList,
-    CharacterRelation,
     CharacterRole,
     Chapter,
     DialogueLine,
@@ -392,7 +391,7 @@ CHUNK2_YAML = yaml.dump({
 class TestPipelineMerge:
     def test_merge_results(self):
         """按顺序合并两个 chunk 的 YAML 结果。"""
-        results = [(0, CHUNK1_YAML), (1, CHUNK2_YAML)]
+        results = [(0, 1, CHUNK1_YAML), (1, 2, CHUNK2_YAML)]
         result = _merge_results(results, novel_name="测试")
         assert result.title == "测试"
         assert len(result.chapters) == 2
@@ -403,7 +402,7 @@ class TestPipelineMerge:
 
     def test_merge_results_out_of_order(self):
         """乱序结果 → 按索引排序后合并。"""
-        results = [(1, CHUNK2_YAML), (0, CHUNK1_YAML)]
+        results = [(1, 2, CHUNK2_YAML), (0, 1, CHUNK1_YAML)]
         result = _merge_results(results)
         assert result.chapters[0].chapter_number == 1
 

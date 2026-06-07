@@ -71,25 +71,6 @@ class CharacterList(BaseModel):
         result.characters.sort(key=lambda c: c.importance, reverse=True)
         return result
 
-    def to_markdown(self) -> str:
-        lines = ["# 角色图谱\n"]
-        for c in self.characters:
-            lines.append(f"## {c.name}")
-            if c.english_name:
-                lines.append(f"**English:** {c.english_name}")
-            if c.aliases:
-                lines.append(f"**别名:** {', '.join(c.aliases)}")
-            lines.append(f"**定位:** {c.role.value} | **重要度:** {c.importance}/10")
-            if c.personality:
-                lines.append(f"**性格:** {c.personality}")
-            if c.appearance:
-                lines.append(f"**外貌:** {c.appearance}")
-            if c.relations:
-                lines.append("\n**关系:**")
-                for r in c.relations:
-                    lines.append(f"  - {r.target}: {r.relation} — {r.description}")
-            lines.append("")
-        return "\n".join(lines)
 
 
 def _merge_two_characters(a: Character, b: Character) -> Character:

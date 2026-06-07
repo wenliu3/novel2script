@@ -2,6 +2,8 @@
 
 AI 辅助剧本创作工具：将中文网络小说自动转换为 LRM 剧本 YAML。
 
+🎬 **[▶ 观看演示视频](https://www.bilibili.com/video/BV1yTEh6CETQ/)**
+
 ![首页截图](docs/screenshot.png)
 
 输入一篇 TXT 小说，自动按章节切分 → 多线程并行调用 LLM → 输出结构化 YAML 剧本。作者可在线预览、复制或下载，快速获得可编辑、可进一步打磨的剧本初稿。
@@ -16,26 +18,7 @@ AI 辅助剧本创作工具：将中文网络小说自动转换为 LRM 剧本 YA
 
 ## 架构
 
-```
-TXT 小说
-  │
-  ▼
-Splitter（智能切分）                          纯 Python
-  │  ① 优先按"第X章"等正则标题切分
-  │  ② 超长章节 / 无章节结构 → 递归字符切分
-  ▼
-Pipeline ──────────────────────────────────  并行处理
-  │  章节1 → ScriptAgent(LLM) → YAML₁  ─┐
-  │  章节2 → ScriptAgent(LLM) → YAML₂  ─┤  ThreadPoolExecutor
-  │  章节N → ScriptAgent(LLM) → YAMLₙ  ─┘
-  ▼
-合并（按章节顺序）
-  │  角色去重 + 保留原始章节编号
-  ▼
-Builder（YAML 导出）                          纯 Python
-  ▼
-output/{小说名}/{小说名}_script.yaml
-```
+![架构图](docs/architecture.png)
 
 每章独立处理，互不依赖，多线程并行加速。LLM 输出的 YAML 若校验失败，会自动重试一次。
 
