@@ -27,6 +27,11 @@ export function fetchTaskStatus(taskId) {
   return api.get(`/status/${taskId}`).then(r => r.data)
 }
 
+/** 预览 YAML 内容（返回文本） */
+export function previewYaml(name) {
+  return api.get(`/preview/${name}`).then(r => r.data)
+}
+
 /** 下载 YAML 文件 */
 export function downloadYaml(name) {
   return api.get(`/download/${name}`, {

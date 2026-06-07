@@ -145,6 +145,20 @@ async def get_status(task_id: str):
     return TaskStatus(**{k: task.get(k, "") for k in TaskStatus.model_fields})
 
 
+@router.get("/preview/{novel_name}")
+async def preview_yaml(novel_name: str):
+    """预览 YAML 内容（返回 JSON 文本，非文件流）。"""
+    try:
+        safe_name = _sanitize_name(novel_name)
+    except ValueError:
+        raise HTTPException(400, "无效的小说名称")
+    path = OUTPUT_BASE / safe_name / f"{safe_name}_script.yaml"
+    if not path.exists():
+        raise HTTPException(404, f"文件不存在: {safe_name}")
+    content = path.read_text(encoding="utf-8")
+    return {"novel_name": safe_name, "content": content}
+
+
 @router.get("/download/{novel_name}")
 async def download_yaml(novel_name: str):
     """下载 YAML 文件。"""
